@@ -33,9 +33,10 @@ var compilerPascal = (function() {
 
             //2 ------------------------------
             parsertree = sintatico(program_tokens); //Return a tree or throw an error
-            if (parsertree)
-                console.log(colors.blue("NÃO HÁ ERRO SINTÁTICO!"));
+            //if (parsertree)
+            //console.log(colors.green(JSON.stringify(parsertree, null, 4)));
 
+            console.log(semantico.getTable());
             callback();
         });
     }
@@ -456,6 +457,8 @@ var compilerPascal = (function() {
         var parser_position = 0;
         var token_expected = null;
         var erro_count = 0;
+        var tabela = [];
+        var tree = {};
 
         function nextToken() {
             parser_position++;
@@ -495,14 +498,15 @@ var compilerPascal = (function() {
          */
         var BNF = {
             PROGRAMA: function() {
+                tree.PROGRAMA = {};
                 if (recognizeByValue("PROGRAM")) {
                     nextToken();
-                    if (BNF.IDENTIFICADOR()) {
+                    if (BNF.IDENTIFICADOR(tree.PROGRAMA)) {
                         if (recognizeByValue(";")) {
                             nextToken();
-                            if (BNF.CORPO()) {
+                            if (BNF.CORPO(tree.PROGRAMA)) {
                                 if (recognizeByValue("EOF")) {
-                                    return true;
+                                    return tree;
                                 } else {
                                     //Se já ocorreu algum erro então não imprime
                                     if (erro_count == 0)
@@ -524,42 +528,61 @@ var compilerPascal = (function() {
                 }
             },
 
-            IDENTIFICADOR: function() {
+            IDENTIFICADOR: function(obj) {
                 if (recognizeByType("VARIAVEL")) {
+                    //obj.IDENTIFICADOR = {};
+                    obj[program_tokens[parser_position].value] = {};
                     nextToken();
                     return true;
                 }
                 return false;
             },
 
-            CORPO: function() {
-                if (BNF.DECLARACOES()) {
-                    if (BNF.BLOCO()) {
+            CORPO: function(obj) {
+                obj.CORPO = {};
+                if (BNF.DECLARACOES(obj.CORPO)) {
+                    if (BNF.BLOCO(obj.CORPO)) {
                         return true;
                     }
                 } else {
-                    if (BNF.BLOCO()) {
+                    if (BNF.BLOCO(obj.CORPO)) {
                         return true;
                     }
                 }
                 return false;
             },
 
-            DECLARACOES: function() { //terminar, eu acho que é tudo OU e nao E o problema de nao reconhecer o codigo do plano de estudo está aqui
-                BNF.DEF_CONST();
-                BNF.DEF_TIPO();
-                BNF.DEF_VAR();
-                BNF.DEF_FUNC();
+            DECLARACOES: function(obj) { //terminar, eu acho que é tudo OU e nao E o problema de nao reconhecer o codigo do plano de estudo está aqui
+                obj.DECLARACOES = {};
+                var listofIDS = { list: [] };
+
+                BNF.DEF_CONST(obj.DECLARACOES, listofIDS);
+                listofIDS.list.forEach(value => {
+                    semantico.updateEscopoById({ ID: value, ESCOPO: "global" });
+                });
+
+                BNF.DEF_TIPO(obj.DECLARACOES, listofIDS);
+                listofIDS.list.forEach(value => {
+                    semantico.updateEscopoById({ ID: value, ESCOPO: "global" });
+                });
+
+                BNF.DEF_VAR(obj.DECLARACOES, listofIDS);
+                listofIDS.list.forEach(value => {
+                    semantico.updateEscopoById({ ID: value, ESCOPO: "global" });
+                });
+
+                BNF.DEF_FUNC(obj.DECLARACOES);
                 return true;
             },
 
-            DEF_VAR: function() {
+            DEF_VAR: function(obj, listofIDS) {
+                obj.DEF_VAR = {};
                 if (recognizeByValue("VAR")) {
                     nextToken();
-                    if (BNF.VARIAVEL()) {
+                    if (BNF.VARIAVEL(obj.DEF_VAR, listofIDS)) {
                         if (recognizeByValue(";")) {
                             nextToken();
-                            if (BNF.VARIAVEIS()) {
+                            if (BNF.VARIAVEIS(obj.DEF_VAR, listofIDS)) {
                                 return true;
                             } else {
                                 return false;
@@ -577,13 +600,14 @@ var compilerPascal = (function() {
                 return true;
             },
 
-            DEF_CONST: function() {
+            DEF_CONST: function(obj, listofIDS) {
                 if (recognizeByValue("CONST")) {
+                    obj.DEF_CONST = {};
                     nextToken();
-                    if (BNF.CONSTANTE()) {
+                    if (BNF.CONSTANTE(obj.DEF_CONST, listofIDS)) {
                         if (recognizeByValue(";")) {
                             nextToken();
-                            if (BNF.CONSTANTES()) {
+                            if (BNF.CONSTANTES(obj.DEF_CONST, listofIDS)) {
                                 return true;
                             }
                             return false;
@@ -602,13 +626,14 @@ var compilerPascal = (function() {
                 return true;
             },
 
-            DEF_TIPO: function() {
+            DEF_TIPO: function(obj, listofIDS) {
                 if (recognizeByValue("TYPE")) {
+                    obj.DEF_TIPO = {};
                     nextToken();
-                    if (BNF.TIPO()) {
+                    if (BNF.TIPO(obj.DEF_TIPO)) {
                         if (recognizeByValue(";")) {
                             nextToken();
-                            if (BNF.TIPOS()) {
+                            if (BNF.TIPOS(obj.DEF_TIPO)) {
                                 return true;
                             }
                             return false;
@@ -627,11 +652,12 @@ var compilerPascal = (function() {
                 return true;
             },
 
-            DEF_FUNC: function() {
+            DEF_FUNC: function(obj) {
                 if (recognizeByValue("FUNCTION")) {
+                    obj.DEF_FUNC = {};
                     nextToken();
-                    if (BNF.FUNCAO()) {
-                        if (BNF.FUNCOES()) {
+                    if (BNF.FUNCAO(obj.DEF_FUNC)) {
+                        if (BNF.FUNCOES(obj.DEF_FUNC)) {
                             return true;
                         }
                         return false;
@@ -645,11 +671,12 @@ var compilerPascal = (function() {
                 return true;
             },
 
-            CONSTANTES: function() {
-                if (BNF.CONSTANTE()) {
+            CONSTANTES: function(obj, listofIDS) {
+                obj.CONSTANTES = {};
+                if (BNF.CONSTANTE(obj.CONSTANTES, listofIDS)) {
                     if (recognizeByValue(";")) {
                         nextToken();
-                        if (BNF.CONSTANTES()) {
+                        if (BNF.CONSTANTES(obj.CONSTANTES, listofIDS)) {
                             return true;
                         }
                     } else {
@@ -659,13 +686,13 @@ var compilerPascal = (function() {
                 return true;
             },
 
-            CONSTANTE: function() {
-                if (BNF.IDENTIFICADOR()) {
+            CONSTANTE: function(obj, listofIDS) {
+                obj.CONSTANTE = {};
+                if (BNF.IDENTIFICADOR(obj.CONSTANTE)) {
+                    semantico.add(program_tokens[parser_position - 1].value, "CONST");
                     if (recognizeByValue("=")) {
                         nextToken();
-                        console.log("cacacacaca");
-                        if (BNF.CONST_VALOR()) {
-                            console.log("tem que entrar aquiiiiiiiiiiii");
+                        if (BNF.CONST_VALOR(obj.CONSTANTE)) {
                             return true;
                         }
                     } else {
@@ -675,8 +702,8 @@ var compilerPascal = (function() {
                 return false;
             },
 
-            CONST_VALOR: function() { //terminar
-                console.log("to no meio");
+            CONST_VALOR: function(obj) { //terminar
+                obj.CONST_VALOR = {};
                 if (recognizeByValue('"')) {
                     nextToken();
                     if (recognizeByType("ENTREASPAS")) {
@@ -688,10 +715,8 @@ var compilerPascal = (function() {
                             erro(true);
                         }
                     }
-                } else if (BNF.NOME_NUMERO()) {
-                    console.log("to no meio1");
-                    if (BNF.EXP_MATEMATICA()) {
-                        console.log("to no meio2");
+                } else if (BNF.NOME_NUMERO(obj.CONST_VALOR)) {
+                    if (BNF.EXP_MATEMATICA(obj.CONST_VALOR)) {
                         return true;
                     }
                 }
@@ -706,11 +731,12 @@ var compilerPascal = (function() {
                 return false;
             },
 
-            TIPOS: function() {
-                if (BNF.TIPO()) {
+            TIPOS: function(obj) {
+                obj.TIPOS = {};
+                if (BNF.TIPO(obj.TIPOS)) {
                     if (recognizeByValue(";")) {
                         nextToken();
-                        if (BNF.TIPOS()) {
+                        if (BNF.TIPOS(obj.TIPOS)) {
                             return true;
                         }
                         return false;
@@ -721,11 +747,12 @@ var compilerPascal = (function() {
                 return true;
             },
 
-            TIPO: function() {
-                if (BNF.IDENTIFICADOR()) {
+            TIPO: function(obj) {
+                obj.TIPO = {};
+                if (BNF.IDENTIFICADOR(obj.TIPO)) {
                     if (recognizeByValue("=")) {
                         nextToken();
-                        if (BNF.TIPO_DADO()) {
+                        if (BNF.TIPO_DADO(obj.TIPO)) {
                             return true;
                         }
                     } else {
@@ -735,7 +762,8 @@ var compilerPascal = (function() {
                 return false;
             },
 
-            TIPO_DADO: function() {
+            TIPO_DADO: function(obj) {
+                obj.TIPO_DADO = {};
                 if (recognizeByValue("INTEGER")) {
                     nextToken();
                     return true;
@@ -752,7 +780,7 @@ var compilerPascal = (function() {
                                 nextToken();
                                 if (recognizeByValue("OF")) {
                                     nextToken();
-                                    if (BNF.TIPO_DADO()) {
+                                    if (BNF.TIPO_DADO(obj.TIPO_DADO)) {
                                         return true;
                                     }
                                 } else {
@@ -767,18 +795,21 @@ var compilerPascal = (function() {
                     } else {
                         erro(true);
                     }
-                } else if (BNF.IDENTIFICADOR()) { //terminar, por que identificador aqui??? nao entendi
-                    console.log("caiu como identificador");
+                } else if (BNF.IDENTIFICADOR(obj.TIPO_DADO)) { //terminar, por que identificador aqui??? nao entendi
                     return true;
                 }
                 return false;
             },
 
-            VARIAVEIS: function() {
-                if (BNF.VARIAVEL()) {
+            VARIAVEIS: function(obj, listofIDS) {
+                obj.VARIAVEIS = {};
+                var listofIDS_temp = { list: [] };
+                if (BNF.VARIAVEL(obj.VARIAVEIS, listofIDS_temp)) {
+                    listofIDS.list = _.union(listofIDS.list, listofIDS_temp.list)
+                    listofIDS_temp.list = []; //Clean the list
                     if (recognizeByValue(";")) {
                         nextToken();
-                        if (BNF.VARIAVEIS()) {
+                        if (BNF.VARIAVEIS(obj.VARIAVEIS, listofIDS)) {
                             return true;
                         }
                         return false;
@@ -790,14 +821,16 @@ var compilerPascal = (function() {
                 return true;
             },
 
-            VARIAVEL: function() {
-                if (BNF.IDENTIFICADOR()) {
-                    if (BNF.LISTA_ID()) {
+            VARIAVEL: function(obj, listofIDS_temp) {
+                obj.VARIAVEL = {};
+                if (BNF.IDENTIFICADOR(obj.VARIAVEL)) {
+                    if (BNF.LISTA_ID(obj.VARIAVEL, listofIDS_temp)) {
                         if (recognizeByValue(":")) {
                             nextToken();
-                            console.log("tipinho");
-                            if (BNF.TIPO_DADO()) {
-                                console.log("tipinho222222222222222222222222222222222");
+                            if (BNF.TIPO_DADO(obj.VARIAVEL)) {
+                                listofIDS_temp.list.forEach(value => {
+                                    semantico.updateTipoById({ ID: value, TIPO: program_tokens[parser_position - 1].value });
+                                });
                                 return true;
                             }
                         } else {
@@ -808,11 +841,14 @@ var compilerPascal = (function() {
                 return false;
             },
 
-            LISTA_ID: function() {
+            LISTA_ID: function(obj, listofIDS) {
+                var ID = semantico.add(program_tokens[parser_position - 1].value, "VAR");
+                listofIDS.list.push(ID);
+                obj.LISTA_ID = {};
                 if (recognizeByValue(",")) {
                     nextToken();
-                    if (BNF.IDENTIFICADOR()) {
-                        if (BNF.LISTA_ID()) {
+                    if (BNF.IDENTIFICADOR(obj.LISTA_ID)) {
+                        if (BNF.LISTA_ID(obj.LISTA_ID, listofIDS)) {
                             return true;
                         }
                         return false;
@@ -822,9 +858,10 @@ var compilerPascal = (function() {
                 return true;
             },
 
-            FUNCOES: function() {
-                if (BNF.FUNCAO()) {
-                    if (BNF.FUNCOES()) {
+            FUNCOES: function(obj) {
+                obj.FUNCOES = {};
+                if (BNF.FUNCAO(obj.FUNCOES)) {
+                    if (BNF.FUNCOES(obj.FUNCOES)) {
                         return true;
                     }
                     return false;
@@ -832,21 +869,42 @@ var compilerPascal = (function() {
                 return true;
             },
 
-            FUNCAO: function() {
-                if (BNF.NOME_FUNCAO()) {
-                    if (BNF.BLOCO_FUNCAO()) {
+            FUNCAO: function(obj) {
+                obj.FUNCAO = {};
+                var funcaoname = {};
+                funcaoname.value = "";
+
+                var listofIDS = { list: [] };
+                if (BNF.NOME_FUNCAO(obj.FUNCAO, funcaoname)) {
+                    if (BNF.BLOCO_FUNCAO(obj.FUNCAO, listofIDS)) {
+                        listofIDS.list.forEach(value => {
+                            semantico.updateEscopoById({ ID: value, ESCOPO: funcaoname.value });
+                        });
                         return true;
                     }
                 }
                 return false;
             },
 
-            NOME_FUNCAO: function() {
-                if (BNF.TIPO_DADO()) {
-                    if (BNF.IDENTIFICADOR()) {
+            NOME_FUNCAO: function(obj, funcaoname) {
+                obj.NOME_FUNCAO = {};
+                if (BNF.TIPO_DADO(obj.NOME_FUNCAO)) {
+                    if (BNF.IDENTIFICADOR(obj.NOME_FUNCAO)) {
+                        var NOME = program_tokens[parser_position - 1].value;
+                        var TIPO = program_tokens[parser_position - 2].value;
+                        var ID_FUNC = semantico.add(NOME, "FUNCAO", TIPO);
+                        var ESCOPO = program_tokens[parser_position - 1].value; //nome da funcao
+                        funcaoname.value = ESCOPO;
+
                         if (recognizeByValue("(")) {
                             nextToken();
-                            if (BNF.VARIAVEIS()) {
+                            var listofIDS = { list: [] };
+                            if (BNF.VARIAVEIS(obj.NOME_FUNCAO, listofIDS)) {
+                                listofIDS.list.forEach(value => {
+                                    semantico.updateEscopoById({ ID: value, ESCOPO: ESCOPO });
+                                });
+
+                                semantico.updateQtdById({ ID: ID_FUNC, QUANTIDADE: listofIDS.list.length });
                                 if (recognizeByValue(")")) {
                                     nextToken();
                                     return true;
@@ -862,29 +920,29 @@ var compilerPascal = (function() {
                 return false;
             },
 
-            BLOCO_FUNCAO: function() {
-                if (BNF.DEF_VAR()) {
-                    if (BNF.BLOCO()) {
+            BLOCO_FUNCAO: function(obj, listofIDS) {
+                obj.BLOCO_FUNCAO = {};
+                if (BNF.DEF_VAR(obj.BLOCO_FUNCAO, listofIDS)) {
+                    if (BNF.BLOCO(obj.BLOCO_FUNCAO)) {
                         return true;
                     }
                 } else {
-                    if (BNF.BLOCO()) {
+                    if (BNF.BLOCO(obj.BLOCO_FUNCAO)) {
                         return true;
                     }
                 }
                 return false;
             },
 
-            BLOCO: function() {
+            BLOCO: function(obj) {
+                obj.BLOCO = {};
                 if (recognizeByValue("BEGIN")) {
-                    console.log("comandos");
                     nextToken();
-                    if (BNF.COMANDOS()) {
+                    if (BNF.COMANDOS(obj.BLOCO)) {
                         return true;
                     }
                 } else {
-                    console.log("comando");
-                    if (BNF.COMANDO()) {
+                    if (BNF.COMANDO(obj.BLOCO)) {
                         if (recognizeByValue(";")) {
                             nextToken();
                             return true;
@@ -896,15 +954,12 @@ var compilerPascal = (function() {
                 return false;
             },
 
-            COMANDOS: function() {
-                if (BNF.COMANDO()) {
-                    console.log("aqui0");
-                    console.log("ponto e virgula problem");
+            COMANDOS: function(obj) {
+                obj.COMANDOS = {};
+                if (BNF.COMANDO(obj.COMANDOS)) {
                     if (recognizeByValue(";")) {
-                        console.log("ponto e virgula problem resolvido");
                         nextToken();
-                        if (BNF.COMANDOS()) {
-                            console.log("aqui1");
+                        if (BNF.COMANDOS(obj.COMANDOS)) {
                             return true;
                         }
                     } else {
@@ -919,24 +974,23 @@ var compilerPascal = (function() {
                 return false;
             },
 
-            COMANDO: function() {
+            COMANDO: function(obj) {
+                obj.COMANDO = {};
                 if (recognizeByValue("WHILE")) {
-                    console.log("WHILE");
                     nextToken();
-                    if (BNF.EXP_LOGICA()) {
-                        if (BNF.BLOCO()) {
+                    if (BNF.EXP_LOGICA(obj.COMANDO)) {
+                        if (BNF.BLOCO(obj.COMANDO)) {
                             return true;
                         }
                     }
                     erro(false);
                 } else if (recognizeByValue("IF")) {
-                    console.log("IF");
                     nextToken();
-                    if (BNF.EXP_LOGICA()) {
+                    if (BNF.EXP_LOGICA(obj.COMANDO)) {
                         if (recognizeByValue("THEN")) {
                             nextToken();
-                            if (BNF.BLOCO()) {
-                                if (BNF.SENAO()) {
+                            if (BNF.BLOCO(obj.COMANDO)) {
+                                if (BNF.SENAO(obj.COMANDO)) {
                                     return true;
                                 }
                             } else {
@@ -949,28 +1003,28 @@ var compilerPascal = (function() {
                         erro(false);
                     }
                 } else if (recognizeByValue("WRITE")) {
-                    console.log("WRITE");
+                    obj.COMANDO["WRITE"] = {};
                     nextToken();
-                    if (BNF.CONST_VALOR()) {
-                        console.log("write completao");
+                    if (BNF.CONST_VALOR(obj.COMANDO)) {
                         return true;
                     }
                     erro(false);
                 } else if (recognizeByValue("READ")) {
+                    obj.COMANDO["READ"] = {};
                     nextToken();
-                    console.log("READ1");
-                    if (BNF.NOME()) {
-                        console.log("READ2");
+                    if (BNF.NOME(obj.COMANDO)) {
+                        if (!semantico.exist(program_tokens[parser_position - 1].value))
+                            semantico.erro(program_tokens[parser_position - 1].value, "nao foi declarado");
                         return true;
                     }
                     erro(false);
-                } else if (BNF.NOME()) {
-                    console.log("NOME");
+                } else if (BNF.NOME(obj.COMANDO)) {
+                    if (!semantico.exist(program_tokens[parser_position - 1].value))
+                        semantico.erro(program_tokens[parser_position - 1].value, "nao foi declarado");
                     if (recognizeByValue(":=")) {
+                        obj.COMANDO[":="] = {};
                         nextToken();
-                        console.log("cafeeeeeeeeeeeeeeeeesass");
-                        if (BNF.VALOR()) {
-                            console.log("tam := 255; foi reconhecido");
+                        if (BNF.VALOR(obj.COMANDO)) {
                             return true;
                         } else {
                             erro(false);
@@ -980,14 +1034,14 @@ var compilerPascal = (function() {
                     }
                 }
 
-                console.log("consertar aquiiiiii");
                 return false;
             },
 
-            SENAO: function() {
+            SENAO: function(obj) {
                 if (recognizeByValue("ELSE")) {
+                    obj.SENAO = {};
                     nextToken();
-                    if (BNF.BLOCO()) {
+                    if (BNF.BLOCO(obj.SENAO)) {
                         return true;
                     }
                     return false;
@@ -995,17 +1049,38 @@ var compilerPascal = (function() {
                 return true;
             },
 
-            VALOR: function() {
-                if (BNF.IDENTIFICADOR()) {
-                    console.log("_____________________");
-                    if (BNF.VALOR_2()) {
-                        console.log("identificador + valor_2");
+            VALOR: function(obj) {
+                //obj.VALOR = {};
+                if (BNF.IDENTIFICADOR(obj)) {
+                    var anterior = program_tokens[parser_position - 3];
+                    var anterior_tk = anterior.value;
+                    var meta_anterior = semantico.query(anterior_tk, "", "", "", "", "");
+
+                    var atual = program_tokens[parser_position - 1];
+                    var atual_tk = atual.value;
+                    var meta_atual = semantico.query(atual_tk, "", "", "", "", "");
+
+                    // console.log(meta_anterior);
+                    // console.log(meta_atual);
+                    //console.log("testando query: " + semantico.query("a", "", "", "", "", "exp"));
+                    try {
+
+                        //console.log("deu certo no try (" + anterior_tk + ") == (" + atual_tk + ")");
+                        //console.log("deu certo no try (" + meta_anterior.TIPO + ") == (" + meta_atual.TIPO + ")");
+                        if (meta_anterior.TIPO != meta_atual.TIPO)
+                            semantico.erro("(" + anterior_tk + ") & (" + atual_tk + ")", " TIPOS diferentes : (" + meta_anterior.TIPO + ") e (" + meta_atual.TIPO + ") na linha: " + anterior.caret_line);
+                    } catch (error) {
+                        //console.log("erro no try");
+                        semantico.erro("(" + anterior_tk + ")", "Tipos não definidos comparado : ( " + atual_tk + " ) na linha: " + anterior.caret_line);
+                    }
+
+                    //console.log(anterior);
+                    if (BNF.VALOR_2(obj)) {
                         return true;
                     }
                 } else {
-                    if (BNF.NUMERO()) {
-                        if (BNF.EXP_MATEMATICA()) {
-                            console.log("NUMERO + EXP_MATEMATICA");
+                    if (BNF.NUMERO(obj)) {
+                        if (BNF.EXP_MATEMATICA(obj)) {
                             return true;
                         }
                     }
@@ -1013,11 +1088,27 @@ var compilerPascal = (function() {
                 return false;
             },
 
-            VALOR_2: function() {
+            VALOR_2: function(obj) {
+                obj.VALOR_2 = {};
                 if (recognizeByValue("(")) {
+                    var funcaonome = program_tokens[parser_position - 1].value;
+                    if (!(semantico.isFuncao(funcaonome)))
+                        semantico.erro(program_tokens[parser_position - 1].value, "FUNCAO não foi declarada");
                     nextToken();
-                    if (BNF.PARAMETRO()) {
+                    var listofIDS = [];
+                    if (BNF.PARAMETRO(obj.VALOR_2, listofIDS)) {
                         if (recognizeByValue(")")) {
+                            var meta = semantico.getMeta(funcaonome);
+
+                            listofIDS.forEach(value => {
+                                semantico.updateEscopoById({ ID: value, ESCOPO: funcaonome });
+                            });
+
+                            if (listofIDS.length > meta.QUANTIDADE)
+                                semantico.erro(funcaonome, " FUNCAO não permite mais do que : " + meta.QUANTIDADE + " parâmetros");
+                            else if (listofIDS.length < meta.QUANTIDADE)
+                                semantico.erro(funcaonome, " FUNCAO não permite menos que : " + meta.QUANTIDADE + " parâmetros");
+
                             nextToken();
                             return true;
                         } else {
@@ -1025,8 +1116,8 @@ var compilerPascal = (function() {
                         }
                     }
                 } else {
-                    if (BNF.INDICE()) {
-                        if (BNF.EXP_MATEMATICA()) {
+                    if (BNF.INDICE(obj.VALOR_2)) {
+                        if (BNF.EXP_MATEMATICA(obj.VALOR_2)) {
                             return true;
                         }
                     }
@@ -1034,19 +1125,24 @@ var compilerPascal = (function() {
                 return false;
             },
 
-            PARAMETRO: function() {
-                if (BNF.NOME_NUMERO()) {
-                    if (BNF.LISTA_PARAM()) {
+            PARAMETRO: function(obj, listofIDS) {
+                obj.PARAMETRO = {};
+                if (BNF.NOME_NUMERO(obj.PARAMETRO)) {
+                    //semantico.updateTipoById({ ID: value, TIPO: program_tokens[parser_position - 1].value });
+                    var ID = semantico.add(program_tokens[parser_position - 1].value, "PARAMETRO");
+                    listofIDS.push(ID);
+                    if (BNF.LISTA_PARAM(obj.PARAMETRO, listofIDS)) {
                         return true;
                     }
                 }
                 return false;
             },
 
-            LISTA_PARAM: function() {
+            LISTA_PARAM: function(obj, listofIDS) {
+                obj.LISTA_PARAM = {};
                 if (recognizeByValue(",")) {
                     nextToken();
-                    if (BNF.PARAMETRO()) {
+                    if (BNF.PARAMETRO(obj.LISTA_PARAM, listofIDS)) {
                         return true;
                     }
                     return false;
@@ -1054,10 +1150,11 @@ var compilerPascal = (function() {
                 return true;
             },
 
-            EXP_LOGICA: function() {
-                if (BNF.NOME_NUMERO()) {
-                    if (BNF.EXP_MATEMATICA()) {
-                        if (BNF.EXP_LOGICA_2()) {
+            EXP_LOGICA: function(obj) {
+                obj.EXP_LOGICA = {};
+                if (BNF.NOME_NUMERO(obj.EXP_LOGICA)) {
+                    if (BNF.EXP_MATEMATICA(obj.EXP_LOGICA)) {
+                        if (BNF.EXP_LOGICA_2(obj.EXP_LOGICA)) {
                             return true;
                         }
                     }
@@ -1065,9 +1162,10 @@ var compilerPascal = (function() {
                 return false;
             },
 
-            EXP_LOGICA_2: function() {
-                if (BNF.OP_LOGICO()) {
-                    if (BNF.EXP_LOGICA()) {
+            EXP_LOGICA_2: function(obj) {
+                obj.EXP_LOGICA_2 = {};
+                if (BNF.OP_LOGICO(obj.EXP_LOGICA_2)) {
+                    if (BNF.EXP_LOGICA(obj.EXP_LOGICA_2)) {
                         return true;
                     }
                     return false;
@@ -1076,14 +1174,11 @@ var compilerPascal = (function() {
                 return true;
             },
 
-            EXP_MATEMATICA: function() {
-                console.log("tentareiiiiiiiiiiiiiii");
-                if (BNF.OP_MATEMATICO()) {
-                    console.log("to no meio3");
-                    if (BNF.NOME_NUMERO()) {
-                        console.log("to no meio4");
-                        if (BNF.EXP_MATEMATICA()) {
-                            console.log("to no meio5");
+            EXP_MATEMATICA: function(obj) {
+                obj.EXP_MATEMATICA = {};
+                if (BNF.OP_MATEMATICO(obj.EXP_MATEMATICA)) {
+                    if (BNF.NOME_NUMERO(obj.EXP_MATEMATICA)) {
+                        if (BNF.EXP_MATEMATICA(obj.EXP_MATEMATICA)) {
                             return true;
                         }
                         return false;
@@ -1093,8 +1188,9 @@ var compilerPascal = (function() {
                 return true;
             },
 
-            OP_LOGICO: function() {
+            OP_LOGICO: function(obj) {
                 if (recognizeByType("SIMBOLO_LOGICO")) {
+                    obj.OP_MATEMATICO = program_tokens[parser_position].value;
                     nextToken();
                     return true;
                 }
@@ -1102,8 +1198,9 @@ var compilerPascal = (function() {
                 return false;
             },
 
-            OP_MATEMATICO: function() {
+            OP_MATEMATICO: function(obj) {
                 if (recognizeByType("SIMBOLO_MATEMATICO")) {
+                    obj.OP_MATEMATICO = program_tokens[parser_position].value;
                     nextToken();
                     return true;
                 }
@@ -1111,8 +1208,9 @@ var compilerPascal = (function() {
                 return false;
             },
 
-            NOME_NUMERO: function() {
-                if (BNF.NOME()) {
+            NOME_NUMERO: function(obj) {
+                obj.NOME_NUMERO = {};
+                if (BNF.NOME(obj.NOME_NUMERO)) {
                     return true;
                 } else {
                     if (BNF.NUMERO()) {
@@ -1122,19 +1220,21 @@ var compilerPascal = (function() {
                 return false;
             },
 
-            NOME: function() {
-                if (BNF.IDENTIFICADOR()) {
-                    if (BNF.INDICE()) {
+            NOME: function(obj) {
+                //obj.NOME = {};
+                if (BNF.IDENTIFICADOR(obj)) {
+                    if (BNF.INDICE(obj)) {
                         return true;
                     }
                 }
                 return false;
             },
 
-            INDICE: function() {
+            INDICE: function(obj) {
                 if (recognizeByValue("[")) {
+                    obj.INDICE = {};
                     nextToken();
-                    if (BNF.NOME_NUMERO()) {
+                    if (BNF.NOME_NUMERO(obj.INDICE)) {
                         if (recognizeByValue("]")) {
                             nextToken();
                             return true;
@@ -1149,10 +1249,138 @@ var compilerPascal = (function() {
             }
         }
 
-        //Start
-        //console.log(program_tokens);
         return BNF.PROGRAMA();
     }
+
+
+    /**
+     * 
+     */
+    var semantico = (function() {
+        var table = [];
+
+        function add(NOME, CLASS, TIPO, QUANTIDADE, ORDEM, ESCOPO) {
+            var meta = {};
+
+            meta.NOME = NOME;
+            meta.CLASS = CLASS;
+            meta.TIPO = TIPO;
+            meta.QUANTIDADE = QUANTIDADE;
+            meta.ORDEM = ORDEM;
+            meta.ESCOPO = ESCOPO;
+
+            table.push(meta);
+            return (table.length - 1);
+        }
+
+        function updateTipoById(meta) {
+            table[meta.ID].TIPO = meta.TIPO;
+        }
+
+        function updateEscopoById(meta) {
+            table[meta.ID].ESCOPO = meta.ESCOPO;
+        }
+
+        function updateQtdById(meta) {
+            table[meta.ID].QUANTIDADE = meta.QUANTIDADE;
+        }
+
+        function erro(tk, tipoErro) {
+            console.log(colors.red("ERRO SEMANTICO: ") + tk + " " + tipoErro);
+        }
+
+        function getMeta(name) {
+            for (var element of table) {
+                if (element.NOME == name)
+                    return element;
+            }
+
+            return null;
+        }
+
+        function isFuncao(name) {
+            if (table.length == 0)
+                return false;
+
+            for (var element of table) {
+                if (element.NOME == name)
+                    if (element.CLASS == "FUNCAO")
+                        return true;
+            }
+
+            return false;
+        }
+
+        function exist(name) {
+            if (table.length == 0)
+                return false;
+
+            for (var element of table) {
+                if (element.NOME == name)
+                    return true;
+            }
+
+            return false;
+        }
+
+        function query(NOME, CLASS, TIPO, QUANTIDADE, ORDEM, ESCOPO) {
+
+            var paramsfound = 0;
+            //prepare
+            var params = {};
+            if (NOME)
+                params.NOME = NOME;
+            if (CLASS)
+                params.CLASS = CLASS;
+            if (TIPO)
+                params.TIPO = TIPO;
+            if (QUANTIDADE)
+                params.QUANTIDADE = QUANTIDADE;
+            if (ORDEM)
+                params.ORDEM = ORDEM;
+            if (ESCOPO)
+                params.ESCOPO = ESCOPO;
+
+            var paramstomatch = _.size(params);
+
+            for (var line of table) {
+                _.each(params, function(value, index, obj) {
+                    //console.log(line);
+                    //console.log(line[index] + " == " + value);
+                    if (line[index] == value)
+                        paramsfound++;
+
+                    // console.log(element);
+                    // console.log(index);
+                });
+
+                //console.log(paramstomatch + " == " + paramsfound);
+                if (paramstomatch == paramsfound)
+                    return line;
+                else
+                    paramsfound = 0;
+            }
+
+            return null;
+        }
+
+        function getTable() {
+            return table;
+        }
+
+        return {
+            getTable: getTable,
+            add: add,
+            updateTipoById: updateTipoById,
+            updateQtdById: updateQtdById,
+            updateEscopoById: updateEscopoById,
+            isFuncao: isFuncao,
+            getMeta: getMeta,
+            exist: exist,
+            query: query,
+            erro: erro
+        }
+    })();
 
     return {
         init: init
