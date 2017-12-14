@@ -1,7 +1,24 @@
+// Program Program3;
+// const
+//     FiveFoo      = 5;
+//     StringFoo    = "string constant";
+// Var
+//     Num : Integer;
+// 	ca : Real;
+// Begin
+// 	Write 255; 
+// 	Read Num;
+// 	Write 255;
+// 	Read Num;
+// 	Sum := Num1 + Num2;
+// 	Write Sum;
+// 	Read ca;
+// End
+
 program funcoes;
 const TAM = 10;
 type vetor = array[15] of integer;
-var A, B, C, D : integer; E : vetor;
+var A, C : real; result, B, D : integer; E : vetor;
 function integer fatorial(a:integer;)
 	var i : integer;
 begin
@@ -28,7 +45,7 @@ begin
 	begin
 		while i < b
 		begin
-			result := a * a;
+			result := a;
 			i := i + 1;
 		end;
 	end;
@@ -48,8 +65,8 @@ begin
 	end;
 end	
 begin
-	A:=TAM;
+	A:=A;
 	B := fatorial(A);
-	C := exp(A,B);
+	C := exp(A, A);
 	D := maior(E);
 End

@@ -1,6 +1,11 @@
 /**
  * @author Lucas Cordeiro da Silva
- * @property 1- Léxico
+ *  UFF - Universidade Federal Fluminense
+ * @property 1- Lexical Analyzer
+ * @property 2- Syntactic Analyzer
+ * @property 3- Semantic Analyzer
+ * @property 4- Intermediate Code Generator
+ * @property 5- Assembly Generator - Not implemented
  */
 
 "use strict";
@@ -9,7 +14,7 @@ var fs = require('fs');
 var colors = require('colors');
 
 /**
- * Compilador Pascal
+ * Pascal Compiler
  */
 var compilerPascal = (function() {
 
@@ -20,7 +25,7 @@ var compilerPascal = (function() {
      */
     function init(filepath, callback) {
         var program_tokens; //Lexical 
-        var parsertree; //Sintatical
+        var intermediatecode; //Sintatical
 
         fs.readFile(filepath, 'utf8', function(err, data) {
             if (err) throw err;
@@ -31,12 +36,14 @@ var compilerPascal = (function() {
             //     console.log("\n " + key + " -  token: " + colors.green(token.value) + "  tipo: " + (token.type != "ERROR" ? colors.green(token.type) : colors.red(token.type)) + "  line: " + colors.green(token.caret_line) + "  coluna: " + colors.green(token.caret_coll));
             // });
 
-            //2 ------------------------------
-            parsertree = sintatico(program_tokens); //Return a tree or throw an error
-            //if (parsertree)
-            //console.log(colors.green(JSON.stringify(parsertree, null, 4)));
+            //2, 3, 4 ------------------------------
+            intermediatecode = sintatico(program_tokens);
 
-            console.log(semantico.getTable());
+            fs.writeFile("intermediaria.txt", intermediatecode, function(err) {
+                if (err)
+                    return console.log(err);
+                console.log("intermediatecode was saved in intermediaria.txt");
+            });
             callback();
         });
     }
@@ -44,7 +51,7 @@ var compilerPascal = (function() {
     /**
      * 
      * @param {String} code
-     * Recebe o códifo em pascal como parametro 
+     * Receive the code in pascal as parameter
      */
     function lexico(code) {
 
@@ -62,7 +69,7 @@ var compilerPascal = (function() {
         /**
          * 
          * @param {String} palavra
-         * Recebe um TERMINAL para ser classificado
+         * Receive a TERMINAL to be classified
          */
         function clasifyText(palavra) {
             switch (palavra.toUpperCase()) {
@@ -506,7 +513,8 @@ var compilerPascal = (function() {
                             nextToken();
                             if (BNF.CORPO(tree.PROGRAMA)) {
                                 if (recognizeByValue("EOF")) {
-                                    return tree;
+                                    //return tree; // syntactic tree
+                                    return intermediategeneration.getCode(); //Intermediate code
                                 } else {
                                     //Se já ocorreu algum erro então não imprime
                                     if (erro_count == 0)
@@ -691,8 +699,11 @@ var compilerPascal = (function() {
                 if (BNF.IDENTIFICADOR(obj.CONSTANTE)) {
                     semantico.add(program_tokens[parser_position - 1].value, "CONST");
                     if (recognizeByValue("=")) {
+                        var intermediate_val_a = program_tokens[parser_position - 1].value;
                         nextToken();
                         if (BNF.CONST_VALOR(obj.CONSTANTE)) {
+                            var intermediate_val_b = program_tokens[parser_position - 1].value;
+                            intermediategeneration.ATR(intermediate_val_a, intermediate_val_b);
                             return true;
                         }
                     } else {
@@ -896,6 +907,8 @@ var compilerPascal = (function() {
                         var ESCOPO = program_tokens[parser_position - 1].value; //nome da funcao
                         funcaoname.value = ESCOPO;
 
+                        intermediategeneration.setScope(funcaoname.value);
+
                         if (recognizeByValue("(")) {
                             nextToken();
                             var listofIDS = { list: [] };
@@ -978,18 +991,30 @@ var compilerPascal = (function() {
                 obj.COMANDO = {};
                 if (recognizeByValue("WHILE")) {
                     nextToken();
-                    if (BNF.EXP_LOGICA(obj.COMANDO)) {
+                    var intermediate_logicoperation = {};
+                    intermediate_logicoperation.value = "";
+                    if (BNF.EXP_LOGICA(obj.COMANDO, intermediate_logicoperation)) {
+                        var newpoint1 = intermediategeneration.generateNewPoint();
+                        var newpoint2 = intermediategeneration.generateNewPoint();
+                        intermediategeneration[intermediate_logicoperation.value](program_tokens[parser_position - 3].value, program_tokens[parser_position - 1].value, newpoint2, newpoint1); //L1 E L0
                         if (BNF.BLOCO(obj.COMANDO)) {
+                            intermediategeneration.JMP(newpoint1); //L0
+                            intermediategeneration.setPoint(newpoint2); //L1
                             return true;
                         }
                     }
                     erro(false);
                 } else if (recognizeByValue("IF")) {
                     nextToken();
-                    if (BNF.EXP_LOGICA(obj.COMANDO)) {
+                    var intermediate_logicoperation = {};
+                    intermediate_logicoperation.value = "";
+                    if (BNF.EXP_LOGICA(obj.COMANDO, intermediate_logicoperation)) {
+                        var newpoint = intermediategeneration.generateNewPoint();
+                        intermediategeneration[intermediate_logicoperation.value](program_tokens[parser_position - 3].value, program_tokens[parser_position - 1].value, newpoint); //L1
                         if (recognizeByValue("THEN")) {
                             nextToken();
                             if (BNF.BLOCO(obj.COMANDO)) {
+                                intermediategeneration.setPoint(newpoint); //L1
                                 if (BNF.SENAO(obj.COMANDO)) {
                                     return true;
                                 }
@@ -1024,7 +1049,10 @@ var compilerPascal = (function() {
                     if (recognizeByValue(":=")) {
                         obj.COMANDO[":="] = {};
                         nextToken();
-                        if (BNF.VALOR(obj.COMANDO)) {
+
+                        var intermediate_val_a = program_tokens[parser_position - 2].value;
+
+                        if (BNF.VALOR(obj.COMANDO, intermediate_val_a)) {
                             return true;
                         } else {
                             erro(false);
@@ -1049,8 +1077,9 @@ var compilerPascal = (function() {
                 return true;
             },
 
-            VALOR: function(obj) {
+            VALOR: function(obj, intermediate_val_a) {
                 //obj.VALOR = {};
+
                 if (BNF.IDENTIFICADOR(obj)) {
                     var anterior = program_tokens[parser_position - 3];
                     var anterior_tk = anterior.value;
@@ -1060,27 +1089,30 @@ var compilerPascal = (function() {
                     var atual_tk = atual.value;
                     var meta_atual = semantico.query(atual_tk, "", "", "", "", "");
 
-                    // console.log(meta_anterior);
-                    // console.log(meta_atual);
-                    //console.log("testando query: " + semantico.query("a", "", "", "", "", "exp"));
-                    try {
+                    var intermediate_val_b = program_tokens[parser_position - 1].value;
 
-                        //console.log("deu certo no try (" + anterior_tk + ") == (" + atual_tk + ")");
-                        //console.log("deu certo no try (" + meta_anterior.TIPO + ") == (" + meta_atual.TIPO + ")");
+                    try {
                         if (meta_anterior.TIPO != meta_atual.TIPO)
                             semantico.erro("(" + anterior_tk + ") & (" + atual_tk + ")", " TIPOS diferentes : (" + meta_anterior.TIPO + ") e (" + meta_atual.TIPO + ") na linha: " + anterior.caret_line);
                     } catch (error) {
-                        //console.log("erro no try");
                         semantico.erro("(" + anterior_tk + ")", "Tipos não definidos comparado : ( " + atual_tk + " ) na linha: " + anterior.caret_line);
                     }
 
-                    //console.log(anterior);
-                    if (BNF.VALOR_2(obj)) {
+                    var isATRwiththree = {};
+                    isATRwiththree.value = false;
+                    if (BNF.VALOR_2(obj, intermediate_val_a, intermediate_val_b, isATRwiththree)) {
+                        if (!isATRwiththree.value)
+                            intermediategeneration.ATR(intermediate_val_a, intermediate_val_b);
                         return true;
                     }
                 } else {
+                    var intermediate_val_b = program_tokens[parser_position].value;
                     if (BNF.NUMERO(obj)) {
-                        if (BNF.EXP_MATEMATICA(obj)) {
+                        var isATRwiththree = {};
+                        isATRwiththree.value = false;
+                        if (BNF.EXP_MATEMATICA(obj, "intermediate_val_a", "intermediate_val_b", isATRwiththree)) {
+                            if (!isATRwiththree.value)
+                                intermediategeneration.ATR(intermediate_val_a, intermediate_val_b);
                             return true;
                         }
                     }
@@ -1088,7 +1120,7 @@ var compilerPascal = (function() {
                 return false;
             },
 
-            VALOR_2: function(obj) {
+            VALOR_2: function(obj, intermediate_val_a, intermediate_val_b, isATRwiththree) {
                 obj.VALOR_2 = {};
                 if (recognizeByValue("(")) {
                     var funcaonome = program_tokens[parser_position - 1].value;
@@ -1117,7 +1149,7 @@ var compilerPascal = (function() {
                     }
                 } else {
                     if (BNF.INDICE(obj.VALOR_2)) {
-                        if (BNF.EXP_MATEMATICA(obj.VALOR_2)) {
+                        if (BNF.EXP_MATEMATICA(obj.VALOR_2, intermediate_val_a, intermediate_val_b, isATRwiththree)) {
                             return true;
                         }
                     }
@@ -1150,11 +1182,11 @@ var compilerPascal = (function() {
                 return true;
             },
 
-            EXP_LOGICA: function(obj) {
+            EXP_LOGICA: function(obj, intermediate_logicoperation) {
                 obj.EXP_LOGICA = {};
                 if (BNF.NOME_NUMERO(obj.EXP_LOGICA)) {
                     if (BNF.EXP_MATEMATICA(obj.EXP_LOGICA)) {
-                        if (BNF.EXP_LOGICA_2(obj.EXP_LOGICA)) {
+                        if (BNF.EXP_LOGICA_2(obj.EXP_LOGICA, intermediate_logicoperation)) {
                             return true;
                         }
                     }
@@ -1162,9 +1194,9 @@ var compilerPascal = (function() {
                 return false;
             },
 
-            EXP_LOGICA_2: function(obj) {
+            EXP_LOGICA_2: function(obj, intermediate_logicoperation) {
                 obj.EXP_LOGICA_2 = {};
-                if (BNF.OP_LOGICO(obj.EXP_LOGICA_2)) {
+                if (BNF.OP_LOGICO(obj.EXP_LOGICA_2, intermediate_logicoperation)) {
                     if (BNF.EXP_LOGICA(obj.EXP_LOGICA_2)) {
                         return true;
                     }
@@ -1174,11 +1206,20 @@ var compilerPascal = (function() {
                 return true;
             },
 
-            EXP_MATEMATICA: function(obj) {
+            EXP_MATEMATICA: function(obj, intermediate_val_a, intermediate_val_b, isATRwiththree) {
                 obj.EXP_MATEMATICA = {};
-                if (BNF.OP_MATEMATICO(obj.EXP_MATEMATICA)) {
+                var intermediate_mathoperation = {}
+                intermediate_mathoperation.value = "";
+
+                if (BNF.OP_MATEMATICO(obj.EXP_MATEMATICA, intermediate_mathoperation)) {
                     if (BNF.NOME_NUMERO(obj.EXP_MATEMATICA)) {
-                        if (BNF.EXP_MATEMATICA(obj.EXP_MATEMATICA)) {
+                        var intermediate_val_c = program_tokens[parser_position - 1].value;
+
+                        if (intermediate_val_a != undefined) {
+                            isATRwiththree.value = true;
+                            intermediategeneration[intermediate_mathoperation.value](intermediate_val_a, intermediate_val_b, intermediate_val_c);
+                        }
+                        if (BNF.EXP_MATEMATICA(obj.EXP_MATEMATICA, intermediate_val_a, intermediate_val_b, isATRwiththree)) {
                             return true;
                         }
                         return false;
@@ -1188,9 +1229,18 @@ var compilerPascal = (function() {
                 return true;
             },
 
-            OP_LOGICO: function(obj) {
+            OP_LOGICO: function(obj, intermediate_logicoperation) {
                 if (recognizeByType("SIMBOLO_LOGICO")) {
                     obj.OP_MATEMATICO = program_tokens[parser_position].value;
+
+                    if (obj.OP_MATEMATICO == "<") {
+                        intermediate_logicoperation.value = "JLT"
+                    } else if (obj.OP_MATEMATICO == ">") {
+                        intermediate_logicoperation.value = "JGT"
+                    } else if (obj.OP_MATEMATICO == "=") {
+                        intermediate_logicoperation.value = "JET"
+                    }
+
                     nextToken();
                     return true;
                 }
@@ -1198,9 +1248,20 @@ var compilerPascal = (function() {
                 return false;
             },
 
-            OP_MATEMATICO: function(obj) {
+            OP_MATEMATICO: function(obj, intermediate_mathoperation) {
                 if (recognizeByType("SIMBOLO_MATEMATICO")) {
                     obj.OP_MATEMATICO = program_tokens[parser_position].value;
+
+                    if (obj.OP_MATEMATICO == "+") {
+                        intermediate_mathoperation.value = "ADD"
+                    } else if (obj.OP_MATEMATICO == "-") {
+                        intermediate_mathoperation.value = "SUB"
+                    } else if (obj.OP_MATEMATICO == "*") {
+                        intermediate_mathoperation.value = "MUL"
+                    } else if (obj.OP_MATEMATICO == "/") {
+                        intermediate_mathoperation.value = "DIV"
+                    }
+
                     nextToken();
                     return true;
                 }
@@ -1345,16 +1406,10 @@ var compilerPascal = (function() {
 
             for (var line of table) {
                 _.each(params, function(value, index, obj) {
-                    //console.log(line);
-                    //console.log(line[index] + " == " + value);
                     if (line[index] == value)
                         paramsfound++;
-
-                    // console.log(element);
-                    // console.log(index);
                 });
 
-                //console.log(paramstomatch + " == " + paramsfound);
                 if (paramstomatch == paramsfound)
                     return line;
                 else
@@ -1379,6 +1434,109 @@ var compilerPascal = (function() {
             exist: exist,
             query: query,
             erro: erro
+        }
+    })();
+
+    /**
+     * 
+     */
+    var intermediategeneration = (function() {
+        var code = "";
+        var code_global = ""
+        var code_function = [];
+        var pointid = 0;
+
+        function ADD(a, b, c) {
+            code += "    ADD " + a + ", " + b + ", " + c + "\n";
+        }
+
+        function SUB(a, b, c) {
+            code += "    SUB " + a + ", " + b + ", " + c + "\n";
+        }
+
+        function MUL(a, b, c) {
+            code += "    MUL " + a + ", " + b + ", " + c + "\n";
+        }
+
+        function DIV(a, b, c) {
+            code += "    DIV " + a + ", " + b + ", " + c + "\n";
+        }
+
+        function JMP(label) {
+            code += "    JMP " + label + "\n";
+        }
+
+        function JNZ(a, label) {
+            code += "    JNZ " + a + ", " + label + "\n";
+        }
+
+        function JZ(a, label) {
+            code += "    JZ " + a + ", " + label + "\n";
+        }
+
+        function JGT(a, b, label1, label2) {
+            if (label2 == undefined)
+                code += "    JGT " + a + ", " + b + ", " + label1 + "\n";
+            else
+                code += "    " + label2 + "    JGT " + a + ", " + b + ", " + label1 + "\n";
+        }
+
+        function JLT(a, b, label1, label2) {
+            if (label2 == undefined)
+                code += "    JLT " + a + ", " + b + ", " + label1 + "\n";
+            else
+                code += "    " + label2 + "    JLT " + a + ", " + b + ", " + label1 + "\n";
+        }
+
+        function JET(a, b, label1, label2) {
+            if (label2 == undefined)
+                code += "    JET " + a + ", " + b + ", " + label1 + "\n";
+            else
+                code += "    " + label2 + "    JET " + a + ", " + b + ", " + label1 + "\n";
+        }
+
+        function ATR(a, b) {
+            code += "    ATR " + a + ", " + b + "\n";
+        }
+
+        function CAL(label) {
+            code += "    CALL " + label + "\n";
+        }
+
+        function setScope(label) {
+            code += label + ":" + "\n";
+        }
+
+        function setPoint(label) {
+            code += "    " + label + ":" + "\n";
+        }
+
+        function generateNewPoint() {
+            pointid++;
+            return "L" + pointid;
+        }
+
+        function getCode() {
+            return code;
+        }
+
+        return {
+            ADD: ADD,
+            SUB: SUB,
+            MUL: MUL,
+            DIV: DIV,
+            JMP: JMP,
+            JNZ: JNZ,
+            JZ: JZ,
+            JGT: JGT,
+            JLT: JLT,
+            JET: JET,
+            ATR: ATR,
+            CAL: CAL,
+            getCode: getCode,
+            setScope: setScope,
+            setPoint: setPoint,
+            generateNewPoint: generateNewPoint
         }
     })();
 

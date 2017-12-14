@@ -1,0 +1,33 @@
+    ATR TAM, 10
+fatorial:
+    ATR i, 1
+    ATR result, 1
+    L1    JLT i, a, L2
+    MUL result, result, i
+    ADD i, i, 1
+    JMP L1
+    L2:
+exp:
+    ATR i, 1
+    ATR result, a
+    JET b, 0, L3
+    ATR result, 1
+    L3:
+    L4    JLT i, b, L5
+    ATR result, a
+    ADD i, i, 1
+    JMP L4
+    L5:
+maior:
+    ATR i, 0
+    ATR result, a
+    L6    JLT i, 15, L7
+    JGT ], result, L8
+    ATR result, a
+    L8:
+    JMP L6
+    L7:
+    ATR A, A
+    ATR B, fatorial
+    ATR C, exp
+    ATR D, maior
