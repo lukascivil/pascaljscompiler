@@ -1,7 +1,7 @@
 # pascaljscompiler
 
-![alt text](https://i.imgur.com/lkPMpc6.jpg)
-![alt text](https://i.imgur.com/8v4IrhW.jpg)
-![alt text](https://i.imgur.com/K0Xsk8a.jpg)
-![alt text](https://i.imgur.com/5P2zrUO.jpg)
-![alt text](https://i.imgur.com/M8pHY4V.jpg)
+![alt text](http://lukascivil.com.br/githubimages/pascaljscompiler/Figure_1.png)
+![alt text](http://lukascivil.com.br/githubimages/pascaljscompiler/Figure_2.png)
+![alt text](http://lukascivil.com.br/githubimages/pascaljscompiler/Figure_3.png)
+![alt text](http://lukascivil.com.br/githubimages/pascaljscompiler/Figure_4.png)
+![alt text](http://lukascivil.com.br/githubimages/pascaljscompiler/Figure_5.png)
